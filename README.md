@@ -2,7 +2,7 @@
 
 > A Python CLI tool to lock metadata fields (e.g., genres, tags, summary) on your Kavita server for all series within selected libraries.
 
-![](https://img.shields.io/github/stars/Rabenherz112/compose-manager?color=yellow&style=plastic&label=Stars) ![](https://img.shields.io/discord/728735370560143360?color=5460e6&label=Discord&style=plastic)
+![](https://img.shields.io/github/stars/Rabenherz112/kavita-metadata-locker?color=yellow&style=plastic&label=Stars) ![](https://img.shields.io/discord/728735370560143360?color=5460e6&label=Discord&style=plastic)
 
 ## Features
 
