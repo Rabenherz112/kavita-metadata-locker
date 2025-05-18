@@ -3,11 +3,23 @@
 Kavita Metadata Locker Script
 
 This script connects to a Kavita server to lock specified metadata fields (e.g., genres, tags, summary)
-for all series within selected libraries. It uses the Kavita REST API v2 endpoints.
+for all series within selected libraries. It uses the Kavita REST API endpoints.
+
+Supports both interactive and command-line modes.
+
+Command-line Arguments:
+    -u/--url            Kavita Server URL (e.g., https://kavita.instance.com)
+    -U/--username       Username for authentication
+    -k/--api-key        API Key for authentication
+    -f/--fields         Comma-separated metadata fields (keys or labels) to lock
+    -l/--library-ids    Comma-separated library IDs to process
+    -hs/--hide-skipped  Do not print skipped series messages
+    --version           Show script version and exit
 """
 import requests
 import sys
-__version__ = "2.0.4"
+import argparse
+__version__ = "2.1.1"
 
 # Kavita API endpoints
 API_LOGIN = "/api/Account/login"
@@ -184,6 +196,36 @@ def prompt_lock_fields() -> list:
     return selected
 
 
+def parse_field_args(field_args: str) -> list:
+    """
+    Parse a comma-separated string of field keys or labels into lockable field entries.
+
+    Args:
+        field_args: Comma-separated list of metadata field keys or labels.
+
+    Returns:
+        A list of matching LOCKABLE_FIELDS tuples.
+
+    Exits:
+        SystemExit if none of the provided fields match.
+    """
+    keys = [f.strip().lower() for f in field_args.split(',') if f.strip()]
+    selected = []
+    for key in keys:
+        matched = False
+        for label, data_key, lock_key in LOCKABLE_FIELDS:
+            if key == data_key.lower() or key == label.lower():
+                selected.append((label, data_key, lock_key))
+                matched = True
+                break
+        if not matched:
+            print(f"Unknown field '{key}'. Skipping.", file=sys.stderr)
+    if not selected:
+        print("No valid fields provided. Exiting.", file=sys.stderr)
+        sys.exit(1)
+    return selected
+
+
 def main():
     """
     Main execution flow:
@@ -192,41 +234,74 @@ def main():
     - For each selected library, fetch series, check & lock fields
     - Report statistics
     """
-    print("Configure Kavita Metadata Locker")
-    base_url = input("Kavita Server URL (e.g. https://kavita.instance.com): ").strip()
-    username = input("Username: ").strip()
-    api_key  = input("API Key: ").strip()
+    parser = argparse.ArgumentParser(description="Kavita Metadata Locker")
+    parser.add_argument("-u", "--url", help="Kavita Server URL (e.g., https://kavita.instance.com)")
+    parser.add_argument("-U", "--username", help="Username for authentication")
+    parser.add_argument("-k", "--api-key", help="API Key for authentication")
+    parser.add_argument("-f", "--fields", help="Comma-separated metadata fields (keys or labels) to lock")
+    parser.add_argument("-l", "--library-ids", help="Comma-separated library IDs to process")
+    parser.add_argument("-hs", "--hide-skipped", action="store_true", help="Do not print skipped series messages")
+    parser.add_argument('--version', action='version', version=__version__)
+    args = parser.parse_args()
 
-    lock_fields = prompt_lock_fields()
+    # Credential input
+    if args.url and args.username and args.api_key:
+        base_url = args.url
+        username = args.username
+        api_key = args.api_key
+    else:
+        print("Configure Kavita Metadata Locker")
+        base_url = input("Kavita Server URL (e.g. https://kavita.instance.com): ").strip()
+        username = input("Username: ").strip()
+        api_key  = input("API Key: ").strip()
 
-    print("\nLogging in…")
+    # Field selection
+    if args.fields:
+        lock_fields = parse_field_args(args.fields)
+    else:
+        lock_fields = prompt_lock_fields()
+        # Ask for silent mode
+        silent = input("Do you want to hide skipped series messages? (y/n): ").strip().lower()
+        if silent in ('y', 'yes'):
+            args.hide_skipped = True
+        print("\nLogging in…")
+
     token = login_account(base_url, username, api_key)
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
 
-    print("\nFetching libraries…")
+    # Library selection
     libs = list_libraries(base_url, headers)
     if not libs:
         print("No libraries found.", file=sys.stderr)
         sys.exit(1)
 
-    print("\nAvailable libraries:")
-    for idx, lib in enumerate(libs, 1):
-        print(f"{idx}. {lib['name']} (ID: {lib['id']})")
-
-    choices = input("\nEnter comma-separated library numbers to process: ").split(',')
-    chosen = []
-    for c in choices:
+    if args.library_ids:
         try:
-            chosen.append(libs[int(c.strip())-1])
-        except (ValueError, IndexError):
-            continue
-    if not chosen:
-        print("No valid libraries selected.", file=sys.stderr)
-        sys.exit(1)
+            ids = {int(i.strip()) for i in args.library_ids.split(',') if i.strip()}
+        except ValueError:
+            print("Invalid library IDs provided.", file=sys.stderr)
+            sys.exit(1)
+        chosen = [lib for lib in libs if lib['id'] in ids]
+        if not chosen:
+            print("No matching libraries found.", file=sys.stderr)
+            sys.exit(1)
+    else:
+        print("Available libraries:")
+        for idx, lib in enumerate(libs, 1):
+            print(f"{idx}. {lib['name']} (ID: {lib['id']})")
+        choices = input("Select libraries (comma-separated numbers): ")
+        chosen = []
+        for c in choices.split(','):
+            try:
+                chosen.append(libs[int(c.strip())-1])
+            except (ValueError, IndexError):
+                continue
+        if not chosen:
+            print("No valid libraries selected. Exiting.", file=sys.stderr)
+            sys.exit(1)
 
-    total = 0
-    locked_count = 0
-    skipped_count = 0
+    # Process series
+    total = locked_count = skipped_count = 0
 
     for lib in chosen:
         lib_id = lib['id']
@@ -250,8 +325,9 @@ def main():
                 update_series_metadata(base_url, headers, meta, lock_fields)
                 locked_count += 1
             else:
-                print(f"  Skipping '{title}': selected fields already locked or empty.")
                 skipped_count += 1
+                if not args.hide_skipped:
+                    print(f"  Skipping '{title}': selected fields already locked or empty.")
 
     print(f"\nProcessed {total} series: Locked {locked_count}, Skipped {skipped_count}.")
 

@@ -7,7 +7,7 @@
 ## Features
 
 - Interactive selection of metadata fields to lock
-- Select libraries to apply the lock
+- Full CLI support with arguments for URL, credentials, fields, libraries, and skip suppression
 - Reports statistics: total series processed, locked, and skipped
 
 ## Requirements
@@ -36,6 +36,10 @@
 
 ## Usage
 
+You can run in **interactive mode** or **non-interactive (CLI) mode**:
+
+### Interactive Mode
+
 1. Run the metadata locker:
     ```bash
     python3 kavita-metadata-locker.py
@@ -45,11 +49,32 @@
     - Username: Your Kavita username
     - API Key: Your Kavita API key for the user
     - Fields to lock: Select the metadata fields you want to lock (e.g., genres, tags, summary)
+    - Hide skipped series: Choose whether to hide skipped series in the output
     - Libraries: Select the libraries you want to apply the lock to
 3. The script will print per-series actions and a final summary, for example:
     ```
     Processed 120 series: Locked 100, Skipped 20.
     ```
+
+### CLI Mode
+
+```bash
+python3 kavita-metadata-locker.py \
+    -u https://kavita.instance.com \
+    -U myuser \
+    -k myapikey \
+    -f summary,genres,tags \
+    -l 1,3,5 \
+    -hs
+```
+
+- `-u, --url` Kavita Server URL
+- `-U, --username` Username for authentication
+- `-k, --api-key` API Key for authentication
+- `-f, --fields` Comma-separated metadata fields (keys or labels) to lock
+- `-l, --library-ids` Comma-separated library IDs to process
+- `-hs, --hide-skipped` Do not display per-series skipped messages
+- `--version` Show script version and exit
 
 ## Screenshots
 
